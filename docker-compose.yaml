@@ -1,0 +1,118 @@
+name: salesyx
+
+services:
+  postgres:
+    image: postgres:16
+    restart: always
+    ports:
+      - ${POSTGRES_PORT:-5432}:5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    networks:
+      - dokploy-network
+
+  pgvector:
+    image: pgvector/pgvector:pg16
+    restart: always
+    ports:
+      - ${PGVECTOR_PORT:-5433}:5432
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    networks:
+      - dokploy-network
+    environment:
+      - POSTGRES_DB=${PGVECTOR_DB:-postgres}
+      - POSTGRES_USER=${PGVECTOR_USER:-postgres}
+      - POSTGRES_PASSWORD=${PGVECTOR_PASSWORD}
+
+  ollama:
+    image: ollama/ollama:0.3.4
+    restart: always
+    pull_policy: missing
+    tty: true
+    depends_on:
+      - postgres
+      - pgvector
+    ports:
+      - 11434:11434
+      # Dont know why it says this is in used
+      # - 53:53
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - dokploy-network
+    # GPU support (turn on if you have nvidia gpu
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities:
+    #             - gpu
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: always
+    pull_policy: missing
+    depends_on:
+      - ollama
+    volumes:
+      - webui_data:/app/backend/data
+    ports:
+      - ${WEBUI_PORT:-3000}:8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - OLLAMA_API_BASE_URL=http://ollama:11434/api
+    # For traefik on Dokploy only
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.open-webui.rule=Host(`${WEBUI_URL}`)
+      - traefik.http.routers.open-webui.entrypoints=websecure
+      - traefik.http.routers.open-webui.tls.certResolver=letsencrypt
+      - traefik.http.services.open-webui.loadbalancer.server.port=${WEBUI_PORT:-3000}
+
+  langflow:
+    image: langflowai/langflow:latest
+    restart: always
+    depends_on:
+      - ollama
+    ports:
+      - ${LANGFLOW_PORT:-7860}:7860
+    volumes:
+      - langflow_data:/app/langflow
+    networks:
+      - dokploy-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - LANGFLOW_AUTO_LOGIN=false
+      - LANGFLOW_SUPERUSER=${LANGFLOW_SUPERUSER}
+      - LANGFLOW_SUPERUSER_PASSWORD=${LANGFLOW_SUPERUSER_PASSWORD}
+      - LANGFLOW_dataBASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-postgres}
+      - LANGFLOW_STORE_ENVIRONMENT_VARIABLES=true
+      - LANGFLOW_VARIABLES_TO_GET_FROM_ENVIRONMENT=PGVECTOR_URL,${LANGFLOW_VARIABLES_TO_GET_FROM_ENVIRONMENT}
+      - PGVECTOR_URL=postgresql://${PGVECTOR_USER:-postgres}:${PGVECTOR_PASSWORD}@pgvector:${PGVECTOR_PORT:-5433}/${PGVECTOR_DB:-postgres}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.langflow.rule=Host(`${LANGFLOW_URL}`)
+      - traefik.http.routers.langflow.entrypoints=websecure
+      - traefik.http.routers.langflow.tls.certResolver=letsencrypt
+      - traefik.http.services.langflow.loadbalancer.server.port=${LANGFLOW_PORT:-7860}
+
+networks:
+  # name need to be exact like this for Dokploy
+  dokploy-network:
+    external: true
+
+volumes:
+  postgres_data:
+  pgvector_data:
+  ollama_data:
+  langflow_data:
+  webui_data:
