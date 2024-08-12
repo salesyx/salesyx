@@ -72,7 +72,7 @@ services:
     # For traefik on Dokploy only
     labels:
       - traefik.enable=true
-      - traefik.http.routers.open-webui-${HASH}.rule=Host(`${WEBUI_URL}`)
+      - traefik.http.routers.open-webui-${HASH}.rule=Host(`${WEBUI_HOST}`)
       - traefik.http.routers.open-webui-${HASH}.entrypoints=websecure
       - traefik.http.routers.open-webui-${HASH}.tls.certResolver=letsencrypt
       - traefik.http.services.open-webui-${HASH}.loadbalancer.server.port=${WEBUI_PORT:-8080}
@@ -83,7 +83,7 @@ services:
     depends_on:
       - ollama
     ports:
-      - ${LANGFLOW_PORT:-7860}:7860
+      - ${LANGFLOW_PORT:-7860}
     volumes:
       - langflow-data:/app/langflow
     networks:
@@ -100,7 +100,7 @@ services:
       - PGVECTOR_URL=postgresql://${PGVECTOR_USER:-postgres}:${PGVECTOR_PASSWORD}@pgvector:${PGVECTOR_PORT:-5433}/${PGVECTOR_DB:-postgres}
     labels:
       - traefik.enable=true
-      - traefik.http.routers.langflow-${HASH}.rule=Host(`${LANGFLOW_URL}`)
+      - traefik.http.routers.langflow-${HASH}.rule=Host(`${LANGFLOW_HOST}`)
       - traefik.http.routers.langflow-${HASH}.entrypoints=websecure
       - traefik.http.routers.langflow-${HASH}.tls.certResolver=letsencrypt
       - traefik.http.services.langflow-${HASH}.loadbalancer.server.port=${LANGFLOW_PORT:-7860}
